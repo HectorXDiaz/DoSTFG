@@ -28,7 +28,7 @@ class FileChangeHandler(FileSystemEventHandler):
 
 class FileWriter(threading.Thread):
     def run(self):
-        subprocess.run("sudo poetry run cicflowmeter -i eth0 -c file.csv", shell=True)
+        subprocess.run("poetry run cicflowmeter -i eth0 -c file.csv", shell=True)
 
 class FileReader(threading.Thread):
     def __init__(self, file_path, event, influxdb_connector):
