@@ -11,8 +11,10 @@ import pandas as pd
 import influxdb_client
 from influxdb_client import Point
 from influxdb_client.client.write_api import SYNCHRONOUS
+import argparse
 import constants
 import threading
+import psutil
 
 
 class FileChangeHandler(FileSystemEventHandler):
@@ -27,8 +29,15 @@ class FileChangeHandler(FileSystemEventHandler):
 
 
 class FileWriter(threading.Thread):
+    def __init__(self, interface):
+        super().__init__()
+        self.interface = interface
     def run(self):
-        subprocess.run("poetry run cicflowmeter -i eth0 -c file.csv", shell=True)
+        try:
+            subprocess.run("sudo poetry run cicflowmeter -i " + self.interface + " -c file.csv", shell=True)
+        except OSError as e:
+            # Manejar la excepción aquí
+            print("Error: La interfaz de red especificada no existe.")
 
 class FileReader(threading.Thread):
     def __init__(self, file_path, event, influxdb_connector):
@@ -66,7 +75,18 @@ class InfluxDBConnector:
 
     def connect(self):
         write_client = influxdb_client.InfluxDBClient(url=self.url, token=self.token, org=self.org)
+        self._test(write_client)
         return write_client.write_api(write_options=SYNCHRONOUS)
+    
+    def _test(self, client):
+        health = client.health()
+        if health.status == "pass":
+            print("Connection success.")
+            return True
+        else:
+            print(f"Connection failure: {health.message}!")
+            return False
+
 
 class ProcesadorModelo(threading.Thread):
     def __init__(self, influxdb_connector, linea):
@@ -74,28 +94,14 @@ class ProcesadorModelo(threading.Thread):
         self.influxdb_connector = influxdb_connector
         self.linea = linea
 
-    def _descartar_linea(self):
-        # Dividir la línea en sus componentes
-        elementos = self.linea.split(',')
-
-        # Obtener los puertos de origen y destino
-        puerto_origen = elementos[2]
-        puerto_destino = elementos[3]
-        print(puerto_origen)
-        print(puerto_destino)
-
-        # Verificar si alguno de los puertos es 8086 y descartar la línea en ese caso
-        return puerto_origen == '8086' or puerto_destino == '8086'
-
-    def _procesar_linea(self):
-        if self._descartar_linea():
-            return None
-
+    def _procesar_linea(self,):
         fila_primera = "src_ip,dst_ip,src_port,dst_port,protocol,timestamp,flow_duration,flow_byts_s,flow_pkts_s,fwd_pkts_s,bwd_pkts_s,tot_fwd_pkts,tot_bwd_pkts,totlen_fwd_pkts,totlen_bwd_pkts,fwd_pkt_len_max,fwd_pkt_len_min,fwd_pkt_len_mean,fwd_pkt_len_std,bwd_pkt_len_max,bwd_pkt_len_min,bwd_pkt_len_mean,bwd_pkt_len_std,pkt_len_max,pkt_len_min,pkt_len_mean,pkt_len_std,pkt_len_var,fwd_header_len,bwd_header_len,fwd_seg_size_min,fwd_act_data_pkts,flow_iat_mean,flow_iat_max,flow_iat_min,flow_iat_std,fwd_iat_tot,fwd_iat_max,fwd_iat_min,fwd_iat_mean,fwd_iat_std,bwd_iat_tot,bwd_iat_max,bwd_iat_min,bwd_iat_mean,bwd_iat_std,fwd_psh_flags,bwd_psh_flags,fwd_urg_flags,bwd_urg_flags,fin_flag_cnt,syn_flag_cnt,rst_flag_cnt,psh_flag_cnt,ack_flag_cnt,urg_flag_cnt,ece_flag_cnt,down_up_ratio,pkt_size_avg,init_fwd_win_byts,init_bwd_win_byts,active_max,active_min,active_mean,active_std,idle_max,idle_min,idle_mean,idle_std,fwd_byts_b_avg,fwd_pkts_b_avg,bwd_byts_b_avg,bwd_pkts_b_avg,fwd_blk_rate_avg,bwd_blk_rate_avg,fwd_seg_size_avg,bwd_seg_size_avg,cwr_flag_count,subflow_fwd_pkts,subflow_bwd_pkts,subflow_fwd_byts,subflow_bwd_byts"
         dataset = [fila_primera.split(',')]
         dataset.append(self.linea.split(','))
         df = pd.DataFrame(dataset[1:], columns=dataset[0])
-        df = df.drop(columns=['src_ip', 'dst_ip', 'src_port', 'dst_port', 'timestamp'])
+        self.src_ip=df['src_ip'].iloc[0]
+        self.dst_ip=df['dst_ip'].iloc[0]
+        df = df.drop(columns=['src_port', 'dst_port', 'timestamp'])
         df = df.rename(constants.COLUMNAS, axis=1)
         df = df[constants.ORDEN_COLUMNAS]
 
@@ -104,33 +110,51 @@ class ProcesadorModelo(threading.Thread):
     def procesar_modelo(self):
         try:
             df = self._procesar_linea()
-            if df is None:
-                return  # No procesar la línea si se debe descartar
-
             with open('modelo2.pkl', 'rb') as archivo:
                 arbol_clasificador = pickle.load(archivo)
             nuevas_predicciones = arbol_clasificador.predict(df)
             print(nuevas_predicciones)
-            punto = Point("Prediccion").tag("tipo", "ddos").field("valor", int(nuevas_predicciones[0]))
+
+            punto = Point("Prediccion")
+            
+            punto.tag("ip_cliente", psutil.net_if_addrs()["eth1"][0].address)
+            punto.tag("ip_origen", self.src_ip)
+            punto.tag("ip_destino", self.dst_ip)
+            
+            punto.field("valor", int(nuevas_predicciones[0]))
+            
             write_api = self.influxdb_connector.connect()
             write_api.write(bucket="prueba", org="tfg", record=punto)
         except Exception as e:
             print("Error:", e)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Procesamiento de datos y escritura en InfluxDB')
+    parser.add_argument('-i', '--interface', type=str, help='Interfaz de red a monitorear')
+    parser.add_argument('-u', '--url', type=str, help='URL de InfluxDB')
+    parser.add_argument('-t', '--token', type=str, help='Token de autorización de InfluxDB')
+    parser.add_argument('-o', '--org', type=str, help='Organización en InfluxDB')
+    args = parser.parse_args()
+
+    if not all([args.interface, args.url, args.token, args.org]):
+        parser.error('Se requieren todos los argumentos -i, -u, -t y -o')
+
+
+
     evento_lectura = threading.Event()
     observer = Observer()
     file_change_handler = FileChangeHandler(evento_lectura, 'file.csv')
     observer.schedule(file_change_handler, '.', recursive=False)
     observer.start()
 
-    url = "http://192.168.100.5:8086"
-    token = "afOLMOf3i9doHYGO-l45bUvrsta4c1PrHdz31PiTmz7WtSRnps0wgIn0tRJcJB-bYGleOjXnmCVtPrC86eKU8Q=="
-    org = "tfg"
+    #url = "http://192.168.100.5:8086"
+    #token = "afOLMOf3i9doHYGO-l45bUvrsta4c1PrHdz31PiTmz7WtSRnps0wgIn0tRJcJB-bYGleOjXnmCVtPrC86eKU8Q=="
+    #org = "tfg"
+    #interface = "eth3"
     
-    influxdb_connector = InfluxDBConnector(url, token, org)
-
-    writer_thread = FileWriter()
+    influxdb_connector = InfluxDBConnector(args.url, args.token, args.org)
+    
+    writer_thread = FileWriter(args.interface,)
     reader_thread = FileReader('file.csv', evento_lectura, influxdb_connector)
     
     writer_thread.start()
