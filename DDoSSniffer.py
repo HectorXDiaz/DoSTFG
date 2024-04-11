@@ -85,7 +85,7 @@ class ProcesadorModelo(threading.Thread):
         print(puerto_destino)
 
         # Verificar si alguno de los puertos es 8086 y descartar la línea en ese caso
-        return puerto_origen == '8086' or puerto_destino == '8086':
+        return puerto_origen == '8086' or puerto_destino == '8086'
 
     def _procesar_linea(self):
         if self._descartar_linea():
