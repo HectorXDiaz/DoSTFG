@@ -15,6 +15,7 @@ import argparse
 import constants
 import threading
 import psutil
+import os
 
 
 class FileChangeHandler(FileSystemEventHandler):
@@ -68,13 +69,15 @@ class FileReader(threading.Thread):
 
 
 class InfluxDBConnector:
-    def __init__(self, url, token, org):
-        self.url = url
-        self.token = token
-        self.org = org
+    def __init__(self, server, port, bucket):
+        self.server = server
+        self.port = port
+        self.token = os.getenv("INFLUX_TOKEN")
+        self.org = os.getenv("INFLUX_ORG")
+        self.bucket = bucket
 
     def connect(self):
-        write_client = influxdb_client.InfluxDBClient(url=self.url, token=self.token, org=self.org)
+        write_client = influxdb_client.InfluxDBClient(url="http://"+self.server+":"+self.port, token=self.token, org=self.org)
         self._test(write_client)
         return write_client.write_api(write_options=SYNCHRONOUS)
     
@@ -99,8 +102,10 @@ class ProcesadorModelo(threading.Thread):
         dataset = [fila_primera.split(',')]
         dataset.append(self.linea.split(','))
         df = pd.DataFrame(dataset[1:], columns=dataset[0])
+
         self.src_ip=df['src_ip'].iloc[0]
         self.dst_ip=df['dst_ip'].iloc[0]
+
         df = df.drop(columns=['src_port', 'dst_port', 'timestamp'])
         df = df.rename(constants.COLUMNAS, axis=1)
         df = df[constants.ORDEN_COLUMNAS]
@@ -115,30 +120,32 @@ class ProcesadorModelo(threading.Thread):
             nuevas_predicciones = arbol_clasificador.predict(df)
             print(nuevas_predicciones)
 
-            punto = Point("Prediccion")
+            punto = Point("DDoSnetwork_traffic")
             
-            punto.tag("ip_cliente", psutil.net_if_addrs()["eth1"][0].address)
+            #punto.tag("ip_cliente", psutil.net_if_addrs()["eth1"][0].address)
+            punto.tag("nombre_servidor", socket.gethostname())
             punto.tag("ip_origen", self.src_ip)
             punto.tag("ip_destino", self.dst_ip)
+       
             
-            punto.field("valor", int(nuevas_predicciones[0]))
+            punto.field("Resultado", int(nuevas_predicciones[0]))
+            #punto.field("valor", valor_string)
             
             write_api = self.influxdb_connector.connect()
-            write_api.write(bucket="prueba", org="tfg", record=punto)
+
+            write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=punto)
         except Exception as e:
             print("Error:", e)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Procesamiento de datos y escritura en InfluxDB')
     parser.add_argument('-i', '--interface', type=str, help='Interfaz de red a monitorear')
-    parser.add_argument('-u', '--url', type=str, help='URL de InfluxDB')
-    parser.add_argument('-t', '--token', type=str, help='Token de autorización de InfluxDB')
-    parser.add_argument('-o', '--org', type=str, help='Organización en InfluxDB')
+    parser.add_argument('-s', '--server', type=str, help='IP de InfluxDB')
+    parser.add_argument('-p', '--port', type=str, help='Puerto de InfluxDB')
     args = parser.parse_args()
 
-    if not all([args.interface, args.url, args.token, args.org]):
-        parser.error('Se requieren todos los argumentos -i, -u, -t y -o')
-
+    if not all([args.interface, args.server, args.port]):
+        parser.error('Se requieren todos los argumentos -i, -s y -p')
 
 
     evento_lectura = threading.Event()
@@ -152,7 +159,7 @@ if __name__ == "__main__":
     #org = "tfg"
     #interface = "eth3"
     
-    influxdb_connector = InfluxDBConnector(args.url, args.token, args.org)
+    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3")
     
     writer_thread = FileWriter(args.interface,)
     reader_thread = FileReader('file.csv', evento_lectura, influxdb_connector)
