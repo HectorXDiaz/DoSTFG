@@ -14,7 +14,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 import argparse
 import constants
 import threading
-import psutil
+#import psutil
 import os
 
 
