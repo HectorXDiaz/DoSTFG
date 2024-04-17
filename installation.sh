@@ -19,17 +19,22 @@ cd ../..
 # Instalación de dependencias Python
 sudo pip3.11 install pandas watchdog influxdb-client libpcap poetry
 sudo pip3.11 install scikit-learn==1.2.2
-sudo pip3.11 install poetry
+#sudo pip3.11 install poetry
 
 # Instalación de dependencias del sistema
 sudo apt-get install -y libpcap-dev
 sudo apt install -y git
 
-#Instalación cicflowmeter 
+#Descarga de repositorios cicflowmeter
 sudo git clone https://github.com/hieulw/cicflowmeter DDoSSniffer/temporal/cicflowmeter
 sudo mv DDoSSniffer/temporal/cicflowmeter/* DDoSSniffer
 sudo git clone https://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@github.com/HectorXDiaz/DDoSTFG DDoSSniffer/temporal/DDoSTFG
 sudo mv DDoSSniffer/temporal/DDoSTFG/* DDoSSniffer
+
+#Instalación cicflowmeter
+cd DDoSSniffer
+sudo poetry install
+cd ..
 
 #Limpieza ficheros
 sudo rm -drf DDoSSniffer/temporal
