@@ -115,7 +115,7 @@ class ProcesadorModelo(threading.Thread):
     def procesar_modelo(self):
         try:
             df = self._procesar_linea()
-            with open('modelo2.pkl', 'rb') as archivo:
+            with open('modelo.pkl', 'rb') as archivo:
                 arbol_clasificador = pickle.load(archivo)
             nuevas_predicciones = arbol_clasificador.predict(df)
             print(nuevas_predicciones)
