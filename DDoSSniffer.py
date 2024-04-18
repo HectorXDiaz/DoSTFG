@@ -69,12 +69,12 @@ class FileReader(threading.Thread):
 
 
 class InfluxDBConnector:
-    def __init__(self, server, port, bucket):
+    def __init__(self, server, port, bucket, token, org):
         self.server = server
         self.port = port
-        self.token = os.getenv("INFLUX_TOKEN")
-        self.org = os.getenv("INFLUX_ORG")
         self.bucket = bucket
+        self.token = token
+        self.org = org
 
     def connect(self):
         write_client = influxdb_client.InfluxDBClient(url="http://"+self.server+":"+self.port, token=self.token, org=self.org)
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     #org = "tfg"
     #interface = "eth3"
     
-    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3")
+    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3", os.getenv("INFLUX_TOKEN"), os.getenv("INFLUX_ORG"))
     
     writer_thread = FileWriter(args.interface,)
     reader_thread = FileReader('file.csv', evento_lectura, influxdb_connector)
