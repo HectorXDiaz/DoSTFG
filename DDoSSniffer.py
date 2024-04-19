@@ -14,8 +14,8 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 import argparse
 import constants
 import threading
-#import psutil
 import os
+import json
 
 
 class FileChangeHandler(FileSystemEventHandler):
@@ -37,8 +37,7 @@ class FileWriter(threading.Thread):
         try:
             subprocess.run("sudo poetry run cicflowmeter -i " + self.interface + " -c file.csv", shell=True)
         except OSError as e:
-            # Manejar la excepción aquí
-            print("Error: La interfaz de red especificada no existe.")
+            print("Error: The specified network interface does not exist.")
 
 class FileReader(threading.Thread):
     def __init__(self, file_path, event, influxdb_connector):
@@ -59,9 +58,9 @@ class FileReader(threading.Thread):
                 # Leer y enviar las líneas del archivo a partir de la segunda línea
                 for linea in file:
                     if not first_line:  # Evitar enviar la primera línea
-                        procesarmodelo = ProcesadorModelo(self.influxdb_connector, linea)
+                        procesarmodelo = ModelProccessor(self.influxdb_connector, linea)
                         print(linea.strip()) 
-                        procesarmodelo.procesar_modelo()  # Llamada al método procesar_modelo
+                        procesarmodelo.proccess_model()  # Llamada al método procesar_modelo
                         time.sleep(1)
                     first_line = False
                 self.last_position = file.tell()
@@ -69,17 +68,34 @@ class FileReader(threading.Thread):
 
 
 class InfluxDBConnector:
-    def __init__(self, server, port, bucket, token, org):
+    def __init__(self, server, port, bucket, token, org, point):
         self.server = server
         self.port = port
         self.bucket = bucket
         self.token = token
         self.org = org
+        self.pointName = point
 
     def connect(self):
         write_client = influxdb_client.InfluxDBClient(url="http://"+self.server+":"+self.port, token=self.token, org=self.org)
         self._test(write_client)
+        #return write_client.write_api(write_options=SYNCHRONOUS)
         return write_client.write_api(write_options=SYNCHRONOUS)
+    
+    def point(self, prediction, src_ip, dst_ip):
+
+        point = Point(self.pointName)
+        point.tag("nombre_servidor", socket.gethostname())
+        point.tag("ip_origen", src_ip)
+        point.tag("ip_destino", dst_ip)    
+        point.field("Resultado", int(prediction))
+
+        return point
+    
+    def write(self, point):
+        write_api = self.connect()
+        write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=point)
+
     
     def _test(self, client):
         health = client.health()
@@ -89,15 +105,35 @@ class InfluxDBConnector:
         else:
             print(f"Connection failure: {health.message}!")
             return False
+        
+
+class JsonConfig:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.config = self.load_config()
+
+    def load_config(self):
+        try:
+            with open(self.file_path, 'r') as f:
+                config = json.load(f)
+            return config
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Error: The file {self.file_path} was not found.") from e
+        except json.JSONDecodeError as e:
+            raise json.JSONDecodeError(f"Error: The file {self.file_path} has an incorrect JSON format.") from e
+
+    def field(self, value):
+        if value not in self.config:
+            raise KeyError(f"Error: The field '{value}' is not present in the configuration.")
+        return self.config[value]
 
 
-class ProcesadorModelo(threading.Thread):
+class ModelProccessor:
     def __init__(self, influxdb_connector, linea):
-        super().__init__()
         self.influxdb_connector = influxdb_connector
         self.linea = linea
 
-    def _procesar_linea(self,):
+    def _process_line(self,):
         fila_primera = "src_ip,dst_ip,src_port,dst_port,protocol,timestamp,flow_duration,flow_byts_s,flow_pkts_s,fwd_pkts_s,bwd_pkts_s,tot_fwd_pkts,tot_bwd_pkts,totlen_fwd_pkts,totlen_bwd_pkts,fwd_pkt_len_max,fwd_pkt_len_min,fwd_pkt_len_mean,fwd_pkt_len_std,bwd_pkt_len_max,bwd_pkt_len_min,bwd_pkt_len_mean,bwd_pkt_len_std,pkt_len_max,pkt_len_min,pkt_len_mean,pkt_len_std,pkt_len_var,fwd_header_len,bwd_header_len,fwd_seg_size_min,fwd_act_data_pkts,flow_iat_mean,flow_iat_max,flow_iat_min,flow_iat_std,fwd_iat_tot,fwd_iat_max,fwd_iat_min,fwd_iat_mean,fwd_iat_std,bwd_iat_tot,bwd_iat_max,bwd_iat_min,bwd_iat_mean,bwd_iat_std,fwd_psh_flags,bwd_psh_flags,fwd_urg_flags,bwd_urg_flags,fin_flag_cnt,syn_flag_cnt,rst_flag_cnt,psh_flag_cnt,ack_flag_cnt,urg_flag_cnt,ece_flag_cnt,down_up_ratio,pkt_size_avg,init_fwd_win_byts,init_bwd_win_byts,active_max,active_min,active_mean,active_std,idle_max,idle_min,idle_mean,idle_std,fwd_byts_b_avg,fwd_pkts_b_avg,bwd_byts_b_avg,bwd_pkts_b_avg,fwd_blk_rate_avg,bwd_blk_rate_avg,fwd_seg_size_avg,bwd_seg_size_avg,cwr_flag_count,subflow_fwd_pkts,subflow_bwd_pkts,subflow_fwd_byts,subflow_bwd_byts"
         dataset = [fila_primera.split(',')]
         dataset.append(self.linea.split(','))
@@ -112,32 +148,24 @@ class ProcesadorModelo(threading.Thread):
 
         return df
 
-    def procesar_modelo(self):
-        try:
-            df = self._procesar_linea()
-            with open('modelo.pkl', 'rb') as archivo:
-                arbol_clasificador = pickle.load(archivo)
-            nuevas_predicciones = arbol_clasificador.predict(df)
-            print(nuevas_predicciones)
+    def proccess_model(self):
+ 
+        df = self._process_line()
+        with open('modelo2.pkl', 'rb') as archivo:
+            arbol_clasificador = pickle.load(archivo)
+        nuevas_predicciones = arbol_clasificador.predict(df)
+        print(nuevas_predicciones)
 
-            punto = Point("DDoSnetwork_traffic")
-            
-            #punto.tag("ip_cliente", psutil.net_if_addrs()["eth1"][0].address)
-            punto.tag("nombre_servidor", socket.gethostname())
-            punto.tag("ip_origen", self.src_ip)
-            punto.tag("ip_destino", self.dst_ip)
-       
-            
-            punto.field("Resultado", int(nuevas_predicciones[0]))
-            #punto.field("valor", valor_string)
-            
-            write_api = self.influxdb_connector.connect()
+        punto = self.influxdb_connector.point(int(nuevas_predicciones[0]),self.src_ip,self.dst_ip)
+        self.influxdb_connector.write(punto)
+        #write_api = self.influxdb_connector.connect()
+        #write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=punto)
 
-            write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=punto)
-        except Exception as e:
-            print("Error:", e)
+
 
 if __name__ == "__main__":
+
+
     parser = argparse.ArgumentParser(description='Procesamiento de datos y escritura en InfluxDB')
     parser.add_argument('-i', '--interface', type=str, help='Interfaz de red a monitorear')
     parser.add_argument('-s', '--server', type=str, help='IP de InfluxDB')
@@ -151,6 +179,8 @@ if __name__ == "__main__":
     evento_lectura = threading.Event()
     observer = Observer()
     file_change_handler = FileChangeHandler(evento_lectura, 'file.csv')
+
+
     observer.schedule(file_change_handler, '.', recursive=False)
     observer.start()
 
@@ -159,7 +189,8 @@ if __name__ == "__main__":
     #org = "tfg"
     #interface = "eth3"
     
-    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3", os.getenv("INFLUX_TOKEN"), os.getenv("INFLUX_ORG"))
+    abrirconfig = JsonConfig("config.json")
+    influxdb_connector = InfluxDBConnector(args.server, args.port, abrirconfig.field("bucket"), abrirconfig.field("token"), abrirconfig.field("org"), abrirconfig.field("point"))
     
     writer_thread = FileWriter(args.interface,)
     reader_thread = FileReader('file.csv', evento_lectura, influxdb_connector)
