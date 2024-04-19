@@ -53,9 +53,9 @@ class FileReader(threading.Thread):
                 file.seek(last_position)
                 for linea in file:
                     if not first_line:  
-                        procesarmodelo = ModelProcessor(self.influxdb_connector, linea)
+                        process = ModelProcessor(self.influxdb_connector, linea)
                         print(linea.strip()) 
-                        procesarmodelo.process_model()
+                        process.process_model()
                         time.sleep(1)
                     first_line = False
                 last_position = file.tell()
@@ -139,25 +139,25 @@ class ModelProcessor:
     def process_model(self):
  
         df = self._process_line()
-        with open('modelo2.pkl', 'rb') as archivo:
-            arbol_clasificador = pickle.load(archivo)
-        nuevas_predicciones = arbol_clasificador.predict(df)
-        print(nuevas_predicciones)
+        with open('modelo.pkl', 'rb') as archivo:
+            classifier_tree = pickle.load(archivo)
+        new_predictions = classifier_tree.predict(df)
+        print(new_predictions)
 
-        punto = self.influxdb_connector.point(int(nuevas_predicciones[0]),self.src_ip,self.dst_ip)
-        self.influxdb_connector.write(punto)
+        point = self.influxdb_connector.point(int(new_predictions[0]),self.src_ip,self.dst_ip)
+        self.influxdb_connector.write(point)
 
 if __name__ == "__main__":
 
 
-    parser = argparse.ArgumentParser(description='Procesamiento de datos y escritura en InfluxDB')
-    parser.add_argument('-i', '--interface', type=str, help='Interfaz de red a monitorear')
-    parser.add_argument('-s', '--server', type=str, help='IP de InfluxDB')
-    parser.add_argument('-p', '--port', type=str, help='Puerto de InfluxDB')
+    parser = argparse.ArgumentParser(description='Data processing and writing to InfluxDB')
+    parser.add_argument('-i', '--interface', type=str, help='Network interface to monitor')
+    parser.add_argument('-s', '--server', type=str, help='IP address of InfluxDB')
+    parser.add_argument('-p', '--port', type=str, help='Port of InfluxDB')
     args = parser.parse_args()
 
     if not all([args.interface, args.server, args.port]):
-        parser.error('Se requieren todos los argumentos -i, -s y -p')
+        parser.error('All arguments -i, -s, and -p are required')
 
 
     evento_lectura = threading.Event()
@@ -180,4 +180,4 @@ if __name__ == "__main__":
     observer.stop()
     observer.join()
 
-    print("Programa finalizado.")
+    print("Program finished.")
