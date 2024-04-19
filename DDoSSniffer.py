@@ -14,7 +14,6 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 import argparse
 import constants
 import threading
-#import psutil
 import os
 
 
@@ -69,17 +68,34 @@ class FileReader(threading.Thread):
 
 
 class InfluxDBConnector:
-    def __init__(self, server, port, bucket, token, org):
+    def __init__(self, server, port, bucket, token, org, point):
         self.server = server
         self.port = port
         self.bucket = bucket
         self.token = token
         self.org = org
+        self.pointName = point
 
     def connect(self):
         write_client = influxdb_client.InfluxDBClient(url="http://"+self.server+":"+self.port, token=self.token, org=self.org)
         self._test(write_client)
+        #return write_client.write_api(write_options=SYNCHRONOUS)
         return write_client.write_api(write_options=SYNCHRONOUS)
+    
+    def point(self, prediction, src_ip, dst_ip):
+
+        point = Point(self.pointName)
+        point.tag("nombre_servidor", socket.gethostname())
+        point.tag("ip_origen", src_ip)
+        point.tag("ip_destino", dst_ip)    
+        point.field("Resultado", int(prediction))
+
+        return point
+    
+    def write(self, point):
+        write_api = self.connect()
+        write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=point)
+
     
     def _test(self, client):
         health = client.health()
@@ -91,9 +107,8 @@ class InfluxDBConnector:
             return False
 
 
-class ProcesadorModelo(threading.Thread):
+class ProcesadorModelo:
     def __init__(self, influxdb_connector, linea):
-        super().__init__()
         self.influxdb_connector = influxdb_connector
         self.linea = linea
 
@@ -113,29 +128,19 @@ class ProcesadorModelo(threading.Thread):
         return df
 
     def procesar_modelo(self):
-        try:
-            df = self._procesar_linea()
-            with open('modelo.pkl', 'rb') as archivo:
-                arbol_clasificador = pickle.load(archivo)
-            nuevas_predicciones = arbol_clasificador.predict(df)
-            print(nuevas_predicciones)
+ 
+        df = self._procesar_linea()
+        with open('modelo2.pkl', 'rb') as archivo:
+            arbol_clasificador = pickle.load(archivo)
+        nuevas_predicciones = arbol_clasificador.predict(df)
+        print(nuevas_predicciones)
 
-            punto = Point("DDoSnetwork_traffic")
-            
-            #punto.tag("ip_cliente", psutil.net_if_addrs()["eth1"][0].address)
-            punto.tag("nombre_servidor", socket.gethostname())
-            punto.tag("ip_origen", self.src_ip)
-            punto.tag("ip_destino", self.dst_ip)
-       
-            
-            punto.field("Resultado", int(nuevas_predicciones[0]))
-            #punto.field("valor", valor_string)
-            
-            write_api = self.influxdb_connector.connect()
+        punto = self.influxdb_connector.point(int(nuevas_predicciones[0]),self.src_ip,self.dst_ip)
+        self.influxdb_connector.write(punto)
+        #write_api = self.influxdb_connector.connect()
+        #write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=punto)
 
-            write_api.write(bucket=influxdb_connector.bucket, org=influxdb_connector.org, record=punto)
-        except Exception as e:
-            print("Error:", e)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Procesamiento de datos y escritura en InfluxDB')
@@ -151,6 +156,8 @@ if __name__ == "__main__":
     evento_lectura = threading.Event()
     observer = Observer()
     file_change_handler = FileChangeHandler(evento_lectura, 'file.csv')
+
+
     observer.schedule(file_change_handler, '.', recursive=False)
     observer.start()
 
@@ -159,7 +166,7 @@ if __name__ == "__main__":
     #org = "tfg"
     #interface = "eth3"
     
-    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3", os.getenv("INFLUX_TOKEN"), os.getenv("INFLUX_ORG"))
+    influxdb_connector = InfluxDBConnector(args.server, args.port, "prueba3", os.getenv("INFLUX_TOKEN"), os.getenv("INFLUX_ORG"), "DDoSnetwork_traffic")
     
     writer_thread = FileWriter(args.interface,)
     reader_thread = FileReader('file.csv', evento_lectura, influxdb_connector)
