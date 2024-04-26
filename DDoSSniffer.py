@@ -51,10 +51,10 @@ class FileReader(threading.Thread):
                 self.event.wait()
             with open(self.file_path, 'r') as file:
                 file.seek(last_position)
-                for linea in file:
+                for line in file:
                     if not first_line:  
-                        process = ModelProcessor(self.influxdb_connector, linea)
-                        print(linea.strip()) 
+                        process = ModelProcessor(self.influxdb_connector, line)
+                        print(line.strip()) 
                         process.process_model()
                         time.sleep(1)
                     first_line = False
@@ -118,13 +118,13 @@ class JsonConfig:
         return self.config[value]
 
 class ModelProcessor:
-    def __init__(self, influxdb_connector, linea):
+    def __init__(self, influxdb_connector, line):
         self.influxdb_connector = influxdb_connector
-        self.linea = linea
+        self.line = line
 
     def _process_line(self,):
         dataset = [constants.FIRST_ROW.split(',')]
-        dataset.append(self.linea.split(','))
+        dataset.append(self.line.split(','))
         df = pd.DataFrame(dataset[1:], columns=dataset[0])
 
         self.src_ip=df['src_ip'].iloc[0]
