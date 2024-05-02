@@ -38,6 +38,13 @@ The following **Linux packages** will be installed: build-essential, zlib1g-dev,
 
     /usr/local/bin/python3.11 DDoSSniffer.py -i enp0s8 -s 192.168.150.10 -p 8086
 > **Note:** Make sure to edit the config.json file for a correct connection with InfluxDB. In it, you should define the bucket, token, organization, and measurement (point).
+
+The output of DoSSniffer is an integer value whose real value is:
+
+- 0 if traffic is benign.
+- 1 if traffic corresponds to SYN TCP flood attack.
+- 2 if traffic corresponds to UDP flood.
+- 3 if traffic corresponds to SNMP amplification attack.
 ## References
 https://www.unb.ca/cic/research/applications.html#CICFlowMeter
 
