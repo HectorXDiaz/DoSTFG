@@ -7,7 +7,12 @@ A system developed as a final course project whose objective is to detect whethe
 Cicflowmeter has been used to obtain the data that passes through the interface and a classification tree model has been previously trained to classify the traffic.
 
 ## Requirements
+
 Linux and Python modules requirements
+- Linux system
+> **Note:** The system has been tested exclusively on Debian 11; therefore, it cannot be guaranteed to work on another Linux distribution.
+- InfluxDB to store the data
+- 
 ## Installation
 The installation file requires **execute permissions** and must be run with **sudo**.
 
