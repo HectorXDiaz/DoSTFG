@@ -26,7 +26,7 @@ class InfluxDBConnector:
         point.tag("nombre_servidor", socket.gethostname())
         point.tag("ip_origen", src_ip)
         point.tag("ip_destino", dst_ip)    
-        point.field("Resultado", int(prediction))
+        point.field("resultado", int(prediction))
 
         return point
     
