@@ -1,5 +1,11 @@
 # DoSSniffer
-Introduction
+A system developed as a final course project whose objective is to detect whether the traffic passing through a network interface is benign or corresponds to one of the following DoS attacks:
+- UDP flood
+- SYN TCP flood
+- SNMP amplification attack
+
+Cicflowmeter has been used to obtain the data that passes through the interface and a classification tree model has been previously trained to classify the traffic.
+
 ## Requirements
 Linux and Python modules requirements
 ## Installation
