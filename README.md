@@ -8,11 +8,11 @@ Cicflowmeter has been used to obtain the data that passes through the interface 
 
 ## Requirements
 
-Linux and Python modules requirements
 - Linux system
 > **Note:** The system has been tested exclusively on Debian 11; therefore, it cannot be guaranteed to work on another Linux distribution.
-- InfluxDB to store the data
-- 
+- Python 3.11
+- InfluxDB
+
 ## Installation
 The installation file requires **execute permissions** and must be run with **sudo**.
 
