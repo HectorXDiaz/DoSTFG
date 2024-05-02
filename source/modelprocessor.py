@@ -1,4 +1,4 @@
-import constants
+from .constants import COLUMNS, FIRST_ROW, COLUMN_ORDER
 import pickle
 import pandas as pd
 
@@ -8,7 +8,7 @@ class ModelProcessor:
         self.line = line
 
     def _process_line(self,):
-        dataset = [constants.FIRST_ROW.split(',')]
+        dataset = [FIRST_ROW.split(',')]
         dataset.append(self.line.split(','))
         df = pd.DataFrame(dataset[1:], columns=dataset[0])
 
@@ -16,8 +16,8 @@ class ModelProcessor:
         self.dst_ip=df['dst_ip'].iloc[0]
 
         df = df.drop(columns=['src_port', 'dst_port', 'timestamp'])
-        df = df.rename(constants.COLUMNS, axis=1)
-        df = df[constants.COLUMN_ORDER]
+        df = df.rename(COLUMNS, axis=1)
+        df = df[COLUMN_ORDER]
 
         return df
 
