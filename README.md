@@ -4,7 +4,7 @@ DoSSniffer is a software developed as a final course project whose objective is 
 - SYN TCP flood
 - SNMP amplification attack
 
-Cicflowmeter has been used to obtain the data that passes through the interface and a classification tree model has been previously trained to classify the traffic. Once the data has been processed, it will be sent to InfluxDB, which must be previously configured.
+CICFlowMeter has been used to obtain the data that passes through the interface and a classification tree model has been previously trained to classify the traffic. Once the data has been processed, it will be sent to InfluxDB, which must be previously configured.
 
 ## Requirements
 
