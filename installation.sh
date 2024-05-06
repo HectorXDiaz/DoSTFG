@@ -27,7 +27,6 @@ sudo apt install -y git
 #Descarga de repositorios cicflowmeter
 sudo git clone https://github.com/hieulw/cicflowmeter temporal/cicflowmeter
 sudo mv temporal/cicflowmeter/* .
-#sudo git clone https://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@github.com/HectorXDiaz/DDoSTFG temporal/DDoSTFG
 #sudo mv DDoSSniffer/temporal/DDoSTFG/* DDoSSniffer
 
 #Instalación cicflowmeter
